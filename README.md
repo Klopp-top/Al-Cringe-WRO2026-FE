@@ -1,6 +1,6 @@
 # 🤖 Al-Cringe — WRO 2026 Future Engineers
 
-> **Team Al-Cringe** from 🇺🇿 **Uzbekistan**  
+> **Team Al-Cringe** from 🇺🇿 **Uzbekistan**
 > WRO 2026 Season — Future Engineers Challenge
 
 ---
@@ -13,12 +13,11 @@
 
 ## 👥 The Team
 
-| Photo | Name | Age | Role |
-|-------|------|-----|------|
-| *(photo)* | **Нарзиев Акбаршох** | 16 y.o. — Grade 10 | Hardware & Mechanical |
-| *(photo)* | **Хафизов Шохрухмирзо** | 17 y.o. — Grade 11 | Software & Computer Vision |
-| *(photo)* | **Назаров Асадбек** | 17 y.o. — Grade 11 | Electronics & Integration |
-| *(photo)* | **Эргашев Навруз** | — | Mentor |
+| Photo | Name |
+|-------|------|
+| *(photo)* | **Тешабаев Махкамбек** |
+| *(photo)* | **Нарзиев Акбаршох** |
+| *(photo)* | **Содиков Шукрулло** |
 
 We are a team of three high school students from Uzbekistan, competing in WRO Future Engineers for the 2026 season. Our goal: **1st place at the World Final.**
 
@@ -27,9 +26,9 @@ We are a team of three high school students from Uzbekistan, competing in WRO Fu
 ## 🗂️ Repository Structure
 
 ```
-/code        → Python source code (vision, motors, main logic)
+/code        → Source code (Raspberry Pi vision/logic + Arduino Nano firmware)
 /elec        → Electrical schematics and wiring diagrams
-/mech        → CAD files, STL files for 3D-printed parts
+/mech        → Fusion 360 CAD files, STL files for 3D-printed parts
 /t-photos    → Official team photos (required by WRO rules)
 /v-photos    → Robot photos from all 6 sides (required by WRO rules)
 README.md    → This file
@@ -39,14 +38,16 @@ README.md    → This file
 
 ## 🤖 About the Robot
 
-Our robot uses an **Ackermann steering geometry** with **rear-wheel drive**.  
-Vision and decision-making run entirely on the **Raspberry Pi 5**, with no intermediate microcontroller — this reduces latency compared to Pi + Arduino architectures.
+Our robot uses an **Ackermann steering geometry** with **rear-wheel drive**. The chassis is fully **3D-printed**, designed from scratch in **Fusion 360**.
+
+The architecture splits responsibilities across two boards: the **Raspberry Pi 5** handles computer vision and high-level decision-making, while an **Arduino Nano** takes care of low-level, time-critical control — driving the steering servo and drive motor, and continuously polling the three ultrasonic distance sensors. Sensor readings and motor/servo commands are exchanged between the two boards over a serial (UART/USB) link.
 
 **Key design decisions:**
-- Single-board architecture: RPi 5 handles both CV pipeline and motor control directly via GPIO
-- Wide-angle camera (120° FOV) for maximum field of view during obstacle detection
-- NEMA 17 stepper motor for precise, repeatable speed control without encoder tuning
-- DRV8825 driver with 1/32 microstepping for smooth, quiet motion
+- Two-board architecture: Raspberry Pi 5 for vision and strategy, Arduino Nano for real-time actuator control and sensor polling — keeps the vision loop on the Pi free from timing-sensitive PWM/sensor work
+- Wide field-of-view Pi Camera v3 for obstacle detection
+- Single steering servo (Surpas 25g) driving the Ackermann linkage
+- Drive motor for the regional stage runs open-loop at 915 RPM (no encoder); a version with encoder feedback is planned for the next stage
+- Fully custom 3D-printed chassis, modeled entirely in Fusion 360
 
 ---
 
@@ -54,61 +55,68 @@ Vision and decision-making run entirely on the **Raspberry Pi 5**, with no inter
 
 | Component | Model | Status | Purpose |
 |-----------|-------|--------|---------|
-| Main Controller | Raspberry Pi 5 8GB | ✅ Confirmed | Vision + logic + motor control |
-| Camera | Pi Camera v3 Wide (120°) | ✅ Confirmed | Computer vision |
-| Drive Motor | NEMA 17 Stepper (42HS40) | ✅ Confirmed | Rear-wheel drive |
-| Motor Driver | DRV8825 | ✅ Confirmed | Stepper control (1/32 step) |
-| Steering | Servo MG996R | ✅ Confirmed | Ackermann steering |
-| IMU | MPU-6050 | 🔄 In consideration | Gyroscope + accelerometer |
-| Distance Sensors | HC-SR04 × 2 | 🔄 In consideration | Lateral wall detection |
-| Battery | Li-Po 3S 11.1V 2200mAh | 🔄 In consideration | Main power |
-| DC-DC Converter | LM2596 5V 5A | 🔄 In consideration | Power regulation for RPi |
+| Main Controller | Raspberry Pi 5 8GB | ✅ Confirmed | Vision + high-level logic |
+| Camera | Raspberry Pi Camera v3 | ✅ Confirmed | Computer vision |
+| Microcontroller | Arduino Nano | ✅ Confirmed | Servo & motor control, ultrasonic sensor monitoring |
+| Steering | Servo Surpas 25g | ✅ Confirmed | Ackermann steering |
+| Drive Motor | DC gear motor, 915 RPM (no encoder) | ✅ Confirmed for regional stage | Rear-wheel drive |
+| Distance Sensors | Ultrasonic × 3 | ✅ Confirmed | Obstacle & wall detection |
+| Battery | Li-ion/LiPo 2S 1300mAh | ✅ Confirmed | Main power |
+| Chassis | 3D-printed (custom, Fusion 360) | ✅ Confirmed | Structure |
+| Encoder (drive motor) | — | 🔄 Planned for next stage | Closed-loop speed control |
 
 ---
 
 ## 💻 Software Architecture
 
-**Language:** Python 3.11  
-**Computer Vision:** OpenCV  
-**Motor Control:** RPi.GPIO (direct GPIO, no Arduino)
+**Raspberry Pi 5** — vision and strategy layer
+**Arduino Nano** — real-time actuator/sensor layer
 
 ```
-main.py
+raspberry_pi/
+├── main.py                 → high-level control loop, decision-making
 ├── camera_manager.py       → frame capture, preprocessing
 ├── image_algorithms.py     → wall following, obstacle detection, arbitration
-├── motor_controller.py     → NEMA 17 via DRV8825 (STEP/DIR on GPIO)
-├── servo_controller.py     → steering servo via PCA9685 (I2C)
+├── serial_link.py          → communication with Arduino Nano
 └── utils/
     └── image_transform.py  → HSV masking, blob detection, line detection
+
+arduino_nano/
+└── main.ino                → servo control, motor control (915 RPM, open-loop),
+                               reads 3× ultrasonic sensors, reports over serial
 ```
 
-**Vision pipeline:**
-1. Capture frame from Pi Camera v3 Wide
+**Vision pipeline (Raspberry Pi 5):**
+1. Capture frame from Pi Camera v3
 2. Generate polygon mask (drivable corridor)
 3. Detect colored obstacles (HSV color segmentation)
 4. Wall-following PD controller
 5. Obstacle avoidance arbitration
-6. Output servo angle + motor speed
+6. Send target servo angle + motor command to Arduino Nano over serial
+
+**Control loop (Arduino Nano):**
+1. Poll 3 ultrasonic sensors continuously
+2. Report distances to Raspberry Pi 5
+3. Receive servo angle / motor speed commands from Raspberry Pi 5
+4. Drive steering servo and drive motor accordingly
 
 ---
 
 ## 🚗 Mobility Management
 
-- **Drive:** NEMA 17 stepper motor — rear axle, controlled via DRV8825 in 1/32 microstepping mode
-- **Steering:** Servo motor — Ackermann geometry, 3D-printed linkage
-- **Structure:** 3D-printed multi-layer chassis (base / middle / top)
+- **Drive:** DC gear motor, rear axle, 915 RPM, open-loop for the regional stage (no encoder yet)
+- **Steering:** Surpas 25g servo — Ackermann geometry, 3D-printed linkage
+- **Structure:** Fully 3D-printed chassis, designed in Fusion 360
 
-> *Detailed torque calculations, CAD files, and assembly photos — see [/mech/README_mech.md](mech/README_mech.md)*
+> *Detailed CAD files and assembly photos — see [/mech/README_mech.md](mech/README_mech.md)*
 
 ---
 
 ## ⚡ Power & Electronics
 
-- **Brain:** Raspberry Pi 5 8GB — Python, OpenCV, direct GPIO control
-- **Camera:** Pi Camera v3 Wide — CSI interface, no USB latency
-- **Motor driver:** DRV8825 — STEP/DIR signals from RPi GPIO
-- **Servo driver:** PCA9685 — I2C PWM controller
-- **Power:** Li-Po 3S → DC-DC converter → 5V rail for RPi
+- **Vision & logic:** Raspberry Pi 5 8GB + Pi Camera v3
+- **Real-time control:** Arduino Nano — drives steering servo and drive motor, reads 3× ultrasonic sensors
+- **Power:** Li-ion/LiPo 2S 1300mAh battery
 
 > *Wiring diagrams and power calculations — see [/elec/README_elec.md](elec/README_elec.md)*
 
@@ -116,12 +124,11 @@ main.py
 
 ## 🚧 Obstacle Management
 
-> 🔄 *Algorithm details will be documented here as development progresses*
-
 **Planned approach:**
-- Wall following: PD controller based on pixel analysis of drivable corridor
+- Wall following: PD controller based on pixel analysis of the drivable corridor
 - Obstacle detection: HSV color segmentation (red/green blocks)
-- Arbitration: obstacle avoidance takes priority over wall following when block is detected
+- Distance confirmation: 3 ultrasonic sensors, read by the Arduino Nano, cross-checked with vision data
+- Arbitration: obstacle avoidance takes priority over wall following when a block is detected
 - Crash detection: emergency evasive turn on frontal wall proximity
 
 ---
@@ -144,18 +151,21 @@ All design decisions, iterations, and test results are documented in the enginee
 
 | Date | Entry |
 |------|-------|
-| 2026-05-02 | Initial hardware stack selection — RPi 5, NEMA 17, Pi Camera v3 Wide, DRV8825 |
+| *(early season)* | Team formed; hardware budget planned and gradually purchased (self-funded, no government or sponsor support) |
+| *(later than initially planned)* | Development start delayed while saving for components |
+| *(ongoing)* | Hardware stack finalized — RPi 5 8GB, Pi Camera v3, Arduino Nano, Surpas 25g servo, 915 RPM drive motor, 3× ultrasonic sensors, 2S 1300mAh battery |
+| *(ongoing)* | Chassis modeled and 3D-printed from a custom design in Fusion 360 |
 | *(ongoing)* | *(updated each session)* |
 
 ---
 
 ## 🔮 Planned Improvements
 
-- [ ] Replace breadboard with custom PCB for cleaner wiring
-- [ ] Add lateral HC-SR04 sensors for improved wall detection and parking
+- [ ] Add encoder to the drive motor for closed-loop speed control
+- [ ] Custom PCB to replace current wiring
 - [ ] Implement dynamic HSV color ranges to handle varying lighting conditions
-- [ ] Add MPU-6050 gyroscope for precise 90° and 180° turns
-- [ ] 3D-print dedicated mount for Raspberry Pi (currently taped)
+- [ ] Fine-tune ultrasonic sensor placement for improved wall/obstacle detection
+- [ ] Refine 3D-printed chassis based on regional-stage test results
 
 ---
 
