@@ -7,7 +7,11 @@
 
 ## 📹 Summary Video
 
-> 🎬 *Coming soon — will be added before competition*
+About Robot :
+https://www.youtube.com/shorts/r3tC9qKnNXY
+
+Open Challenge :
+https://www.youtube.com/shorts/dypa3s2m1Cg
 
 ---
 
